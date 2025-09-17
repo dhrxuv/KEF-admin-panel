@@ -1,5 +1,7 @@
 import React, { useState } from "react";
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { auth, db } from "./firebase"; // make sure firebase.js is in src/
+import { doc, getDoc } from "firebase/firestore";
 
 function Login({ onLogin }) {
   const [email, setEmail] = useState("");
@@ -12,11 +14,28 @@ function Login({ onLogin }) {
     setError(null);
     setLoading(true);
 
-    const auth = getAuth();
-
     try {
+      // Step 1: Sign in with Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      onLogin(userCredential.user); // send user back to parent (App.js)
+      const user = userCredential.user;
+
+      // Step 2: Fetch Firestore role
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+
+        if (userData.role === "admin") {
+          onLogin(user); // ✅ allow admin login
+        } else {
+          // ❌ Not admin → sign them out
+          await signOut(auth);
+          setError("You do not have admin access.");
+        }
+      } else {
+        await signOut(auth);
+        setError("User record not found in database.");
+      }
     } catch (err) {
       console.error("Login error:", err);
       setError(err.message);
